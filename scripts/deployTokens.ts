@@ -6,32 +6,37 @@
 import { ethers } from "hardhat";
 import { DummyERC20 } from "../typechain/DummyERC20"
 import { DummyERC721 } from "../typechain/DummyERC721"
+import { DummyERC1155 } from "../typechain/DummyERC1155"
 import { ERC20 } from "../typechain/ERC20"
-import { ERC721 } from "../typechain/ERC721"
 
 type Deployed = {
   ERC721: string
   ERC20: string
+  ERC1155: string
 }
 
 export type Tokens = {
   ERC20: ERC20
   ERC721: DummyERC721
+  ERC1155: DummyERC1155
 }
 
 export const deployTokens = async (print?:Boolean) => {
 
   const dummy20:DummyERC20 = await (await ethers.getContractFactory("DummyERC20")).deploy() as DummyERC20
   const dummy721:DummyERC721 = await (await ethers.getContractFactory("DummyERC721")).deploy() as DummyERC721
+  const dummy1155:DummyERC1155 = await (await ethers.getContractFactory("DummyERC1155")).deploy() as DummyERC1155
 
   const deployed:Deployed = {
     ERC20: dummy20.address,
-    ERC721: dummy721.address
+    ERC721: dummy721.address,
+    ERC1155: dummy1155.address,
   } 
 
   const tokens:Tokens = {
     ERC20: dummy20,
-    ERC721: dummy721
+    ERC721: dummy721,
+    ERC1155: dummy1155,
   }
 
   if (print) {

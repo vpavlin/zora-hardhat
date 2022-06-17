@@ -10,8 +10,11 @@ import { ERC20TransferHelper } from "../typechain/ERC20TransferHelper"
 import { ERC721TransferHelper } from "../typechain/ERC721TransferHelper"
 import { ERC1155TransferHelper } from "../typechain/ERC1155TransferHelper"
 import { AsksFloorPrice } from "../typechain/AsksFloorPrice"
+import { AsksFloorPriceErc1155 } from "../typechain/AsksFloorPriceErc1155"
 import { OffersV1 } from "../typechain/OffersV1"
 import { ReserveAuctionBuyNowErc20 } from "../typechain/ReserveAuctionBuyNowErc20"
+import { ReserveAuctionBuyNowErc20Erc1155 } from "../typechain/ReserveAuctionBuyNowErc20Erc1155"
+
 import { FloorPrice } from "../typechain/FloorPrice"
 
 
@@ -24,8 +27,10 @@ export type Contracts = {
   ERC721TransferHelper: ERC721TransferHelper
   ERC1155TransferHelper: ERC1155TransferHelper
   AsksFP: AsksFloorPrice
+  AsksFP1155: AsksFloorPriceErc1155
   OffersV1: OffersV1
   ReserveAuctionBuyNowERC20: ReserveAuctionBuyNowErc20
+  ReserveAuctionBuyNowERC20ERC1155: ReserveAuctionBuyNowErc20Erc1155
   FloorPrice: FloorPrice
 }
 
@@ -55,6 +60,15 @@ export const deployZora = async (print?:Boolean) => {
   const erc1155TH:ERC1155TransferHelper = await (await ethers.getContractFactory("ERC1155TransferHelper")).deploy(zmm.address) as ERC1155TransferHelper
   const floorPrice:FloorPrice = await (await ethers.getContractFactory("FloorPrice")).deploy(zmm.address) as FloorPrice
 
+  const asksFloorPrice1155:AsksFloorPriceErc1155 = await (await ethers.getContractFactory("AsksFloorPriceErc1155")).deploy(
+    erc20TH.address,
+    erc1155TH.address,
+    ethers.constants.AddressZero,
+    feeSettings.address,
+    wbnb,
+    floorPrice.address
+  ) as AsksFloorPriceErc1155
+
   const asksFloorPrice:AsksFloorPrice = await (await ethers.getContractFactory("AsksFloorPrice")).deploy(
     erc20TH.address,
     erc721TH.address,
@@ -76,13 +90,22 @@ export const deployZora = async (print?:Boolean) => {
       floorPrice.address
     ) as ReserveAuctionBuyNowErc20
 
+  const auctionBuyNowErc20Erc1155:ReserveAuctionBuyNowErc20Erc1155 = await (
+    await ethers.getContractFactory("ReserveAuctionBuyNowErc20Erc1155")).deploy(
+      erc20TH.address,
+      erc1155TH.address,
+      ethers.constants.AddressZero,
+      feeSettings.address,
+      wbnb,
+      floorPrice.address
+    ) as ReserveAuctionBuyNowErc20Erc1155
+
 
   await zmm.registerModule(asksFloorPrice.address)
+  await zmm.registerModule(asksFloorPrice1155.address)
   await zmm.registerModule(offersv1.address)
   await zmm.registerModule(auctionBuyNowErc20.address)
-
-
-
+  await zmm.registerModule(auctionBuyNowErc20Erc1155.address)
 
 
   const contracts:Contracts = {
@@ -94,8 +117,10 @@ export const deployZora = async (print?:Boolean) => {
     ERC721TransferHelper: erc721TH,
     ERC1155TransferHelper: erc1155TH,
     AsksFP: asksFloorPrice,
+    AsksFP1155: asksFloorPrice1155,
     OffersV1: offersv1,
     ReserveAuctionBuyNowERC20: auctionBuyNowErc20,
+    ReserveAuctionBuyNowERC20ERC1155: auctionBuyNowErc20Erc1155,
     FloorPrice: floorPrice,
   }
 

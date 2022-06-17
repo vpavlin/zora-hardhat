@@ -142,9 +142,75 @@ describe("Zora", function () {
       zora.ReserveAuctionBuyNowERC20.buyNowAuction(
         tokens.ERC721.address,
         0,
-        amount2
+        0
         )
-    ).to.be.revertedWith("BUY_NOW_PRICE_NOT_MET")
+    ).to.be.revertedWith("BUY_NOW_NOT_ACTIVE")
+
+    await expect(
+      zora.ReserveAuctionBuyNowERC20.buyNowAuction(
+        tokens.ERC721.address,
+        0,
+        amount
+        )
+    ).to.be.revertedWith("BUY_NOW_NOT_ACTIVE")
+
+    await zora.ReserveAuctionBuyNowERC20.connect(addr2).createBid(
+      tokens.ERC721.address,
+      0,
+      amount2
+    )
+
+    auction = await zora.ReserveAuctionBuyNowERC20.auctionForNFT(tokens.ERC721.address, 0)
+    expect(
+      auction.highestBidder
+    ).to.be.equal(addr2.address)
+
+    await ethers.provider.send('evm_setNextBlockTimestamp', [latestBlock.timestamp + 60 *60 + 10]);
+    await ethers.provider.send('evm_mine', []);
+
+    await zora.ReserveAuctionBuyNowERC20.settleAuction(tokens.ERC721.address, 0)
+
+    expect(
+      await tokens.ERC721.ownerOf(0)
+    ).to.be.equal(addr2.address)
+
+    expect(
+      await tokens.ERC20.balanceOf(addr1.address)
+    ).to.be.equal(amount2)
+
+  })
+
+  it("Should allow posting and bidding in auction from 0", async () => {
+    const amount = ethers.utils.parseEther("0.0001");
+    const amount2 = ethers.utils.parseEther("20");
+
+    //Module approvals set in before each!!
+
+    await zora.FloorPrice.setFloorPrice(tokens.ERC721.address, tokens.ERC20.address, 0)
+
+
+    await tokens.ERC721.connect(addr1).mint();
+
+    await tokens.ERC721.connect(addr1).setApprovalForAll(zora.ERC721TransferHelper.address, true)
+    let latestBlock = await ethers.provider.getBlock("latest")
+
+    await zora.ReserveAuctionBuyNowERC20.connect(addr1).createAuction(
+        tokens.ERC721.address,
+        0,
+        60 * 60,
+        0,
+        0,
+        addr1.address,
+        latestBlock.timestamp + 1,
+        tokens.ERC20.address,
+    );
+    console.log(await zora.ReserveAuctionBuyNowERC20.auctionForNFT(tokens.ERC721.address, 0))
+
+    console.log("Has balance: ", await tokens.ERC721.balanceOf(zora.ReserveAuctionBuyNowERC20.address))
+    console.log("Is owner: ", await tokens.ERC721.ownerOf(0))
+
+    await tokens.ERC721.connect(addr1).setApprovalForAll(zora.ERC721TransferHelper.address, false)
+
 
     await expect(
       zora.ReserveAuctionBuyNowERC20.buyNowAuction(
@@ -152,7 +218,41 @@ describe("Zora", function () {
         0,
         0
         )
-    ).to.be.revertedWith("MINIMUM_BID_NOT_MET")
+    ).to.be.revertedWith("BUY_NOW_NOT_ACTIVE")
+
+
+    await expect(
+      zora.ReserveAuctionBuyNowERC20.createBid(
+        tokens.ERC721.address,
+        0,
+        amount
+      )
+    ).to.be.revertedWith("ERC721: transfer caller is not owner nor approved")
+
+    await tokens.ERC721.connect(addr1).setApprovalForAll(zora.ERC721TransferHelper.address, true)
+
+    await tokens.ERC20.approve(zora.ERC20TransferHelper.address, amount)
+    await zora.ReserveAuctionBuyNowERC20.createBid(
+        tokens.ERC721.address,
+        0,
+        amount
+    )
+
+    let auction = await zora.ReserveAuctionBuyNowERC20.auctionForNFT(tokens.ERC721.address, 0)
+    expect(
+      auction.highestBidder
+    ).to.be.equal(owner.address)
+
+    await tokens.ERC20.transfer(addr2.address, amount2);
+    await tokens.ERC20.connect(addr2).approve(zora.ERC20TransferHelper.address, amount2)
+
+    await expect(
+      zora.ReserveAuctionBuyNowERC20.buyNowAuction(
+        tokens.ERC721.address,
+        0,
+        amount
+        )
+    ).to.be.revertedWith("BUY_NOW_NOT_ACTIVE")
 
     await zora.ReserveAuctionBuyNowERC20.connect(addr2).createBid(
       tokens.ERC721.address,

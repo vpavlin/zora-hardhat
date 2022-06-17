@@ -4,12 +4,12 @@ pragma solidity 0.8.10;
 import {ReentrancyGuard} from "@rari-capital/solmate/src/utils/ReentrancyGuard.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-import {IncomingTransferSupportV1} from "../../contracts/common/IncomingTransferSupport/V1/IncomingTransferSupportV1.sol";
-import {ERC721TransferHelper} from "../../contracts/transferHelpers/ERC721TransferHelper.sol";
-import {FeePayoutSupportV1} from "../../contracts/common/FeePayoutSupport/FeePayoutSupportV1.sol";
-import {ModuleNamingSupportV1} from "../../contracts/common/ModuleNamingSupport/ModuleNamingSupportV1.sol";
+import {IncomingTransferSupportV1} from "../../../contracts/common/IncomingTransferSupport/V1/IncomingTransferSupportV1.sol";
+import {ERC721TransferHelper} from "../../../contracts/transferHelpers/ERC721TransferHelper.sol";
+import {FeePayoutSupportV1} from "../../../contracts/common/FeePayoutSupport/FeePayoutSupportV1.sol";
+import {ModuleNamingSupportV1} from "../../../contracts/common/ModuleNamingSupport/ModuleNamingSupportV1.sol";
 import {IReserveAuctionBuyNowErc20} from "./IReserveAuctionBuyNowErc20.sol";
-import {FloorPrice} from "../../common/FloorPrice/FloorPrice.sol";
+import {FloorPrice} from "../../../common/FloorPrice/FloorPrice.sol";
 
 
 
@@ -18,7 +18,7 @@ import {FloorPrice} from "../../common/FloorPrice/FloorPrice.sol";
 /// @notice Module for minimal ERC-20 timed reserve auctions for ERC-721 tokens
 contract ReserveAuctionBuyNowErc20 is IReserveAuctionBuyNowErc20, ReentrancyGuard, IncomingTransferSupportV1, FeePayoutSupportV1, ModuleNamingSupportV1 {
     /// @notice The minimum amount of time left in an auction after a new bid is created
-    uint16 constant TIME_BUFFER = 15 minutes;
+    uint16 timeBuffer = 15 minutes;
 
     /// @notice The minimum percentage difference between two bids
     uint8 minBidIncrementPercentage = 10;
@@ -235,6 +235,8 @@ contract ReserveAuctionBuyNowErc20 is IReserveAuctionBuyNowErc20, ReentrancyGuar
         // Ensure the reserve price can be downcasted to 96 bits
         require(_reservePrice <= type(uint96).max, "INVALID_RESERVE_PRICE");
 
+        require(floorPrice.priceAboveFloor(_tokenContract, auction.currency, _reservePrice), "PRICE_TOO_LOW");
+
         // Update the reserve price
         auction.reservePrice = uint96(_reservePrice);
 
@@ -258,6 +260,8 @@ contract ReserveAuctionBuyNowErc20 is IReserveAuctionBuyNowErc20, ReentrancyGuar
 
         // Ensure the caller is the seller
         require(msg.sender == auction.seller, "ONLY_SELLER");
+
+        require(_buyNowPrice > auction.reservePrice, "BUY_PRICE_TOO_LOW");
 
         // Update the reserve price
         auction.buyNowPrice = uint96(_buyNowPrice);
@@ -464,11 +468,11 @@ contract ReserveAuctionBuyNowErc20 is IReserveAuctionBuyNowErc20, ReentrancyGuar
         }
 
         // If the bid is placed within 15 minutes of the auction end, extend the auction
-        if (timeRemaining < TIME_BUFFER) {
+        if (timeRemaining < timeBuffer) {
             // Add (15 minutes - remaining time) to the duration so that 15 minutes remain
-            // Cannot underflow as `timeRemaining` is ensured to be less than `TIME_BUFFER`
+            // Cannot underflow as `timeRemaining` is ensured to be less than `timeBuffer`
             unchecked {
-                auction.duration += uint48(TIME_BUFFER - timeRemaining);
+                auction.duration += uint48(timeBuffer - timeRemaining);
             }
 
             // Mark the bid as one that extended the auction
@@ -566,10 +570,16 @@ contract ReserveAuctionBuyNowErc20 is IReserveAuctionBuyNowErc20, ReentrancyGuar
         // Ensure the auction has started or is valid to start
         require(block.timestamp >= auction.startTime, "AUCTION_NOT_STARTED");
 
+        require(auction.buyNowPrice > 0, "BUY_NOW_NOT_ACTIVE");
+
         require(_amount == auction.buyNowPrice, "BUY_NOW_PRICE_NOT_MET");
+
+        uint8 resetMinBid = minBidIncrementPercentage;
+        minBidIncrementPercentage = 0;
 
         createBid(_tokenContract, _tokenId, _amount);
 
+        minBidIncrementPercentage = resetMinBid;
         auction.duration = 0;
 
         settleAuction(_tokenContract, _tokenId);
@@ -579,5 +589,11 @@ contract ReserveAuctionBuyNowErc20 is IReserveAuctionBuyNowErc20, ReentrancyGuar
         require(msg.sender == erc721TransferHelper.ZMM().registrar(), "NOT_ALLOWED");
 
         minBidIncrementPercentage = newIncrement;
+    }
+
+    function setTimeBuffer(uint16 newBuffer) external {
+        require(msg.sender == erc721TransferHelper.ZMM().registrar(), "NOT_ALLOWED");
+
+        timeBuffer = newBuffer;
     }
 }

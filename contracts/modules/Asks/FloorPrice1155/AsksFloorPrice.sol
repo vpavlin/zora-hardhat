@@ -2,8 +2,8 @@
 pragma solidity 0.8.10;
 
 import {ReentrancyGuard} from "@rari-capital/solmate/src/utils/ReentrancyGuard.sol";
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import {ERC721TransferHelper} from "../../../contracts/transferHelpers/ERC721TransferHelper.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import {ERC1155TransferHelper} from "../../../contracts/transferHelpers/ERC1155TransferHelper.sol";
 import {UniversalExchangeEventV1} from "../../../contracts/common/UniversalExchangeEvent/V1/UniversalExchangeEventV1.sol";
 import {IncomingTransferSupportV1} from "../../../contracts/common/IncomingTransferSupport/V1/IncomingTransferSupportV1.sol";
 import {FeePayoutSupportV1} from "../../../contracts/common/FeePayoutSupport/FeePayoutSupportV1.sol";
@@ -12,19 +12,24 @@ import {FloorPrice} from "../../../common/FloorPrice/FloorPrice.sol";
 
 /// @title Asks V1.1
 /// @author tbtstl <t@zora.co>
-/// @notice This module allows sellers to list an owned ERC-721 token for sale for a given price in a given currency, and allows buyers to purchase from those asks
-contract AsksFloorPrice is ReentrancyGuard, UniversalExchangeEventV1, IncomingTransferSupportV1, FeePayoutSupportV1, ModuleNamingSupportV1 {
+/// @notice This module allows sellers to list an owned ERC-1155 token for sale for a given price in a given currency, and allows buyers to purchase from those asks
+contract AsksFloorPriceErc1155 is ReentrancyGuard, UniversalExchangeEventV1, IncomingTransferSupportV1, FeePayoutSupportV1, ModuleNamingSupportV1 {
     /// @dev The indicator to pass all remaining gas when paying out royalties
     uint256 private constant USE_ALL_GAS_FLAG = 0;
 
-    /// @notice The ZORA ERC-721 Transfer Helper
-    ERC721TransferHelper public immutable erc721TransferHelper;
+    /// @notice The ZORA ERC-1155 Transfer Helper
+    ERC1155TransferHelper public immutable erc1155TransferHelper;
 
     FloorPrice public immutable floorPrice;
 
     /// @notice The ask for a given NFT, if one exists
-    /// @dev ERC-721 token contract => ERC-721 token ID => Ask
-    mapping(address => mapping(uint256 => Ask)) public askForNFT;
+    /// @dev ERC-1155 token contract => ERC-1155 token ID => Ask Id => Ask
+    mapping(address => mapping(uint256 => mapping(uint256 => Ask))) public askForNFT;
+
+    /// @dev ERC-1155 token contract => ERC-1155 token ID => Seller Address => List of Ask ID
+    mapping(address => mapping(uint256 => mapping(address => uint256[]))) public asksPerUser;
+
+    uint256 public asksCount;
 
     /// @notice The metadata for an ask
     /// @param seller The address of the seller placing the ask
@@ -37,53 +42,54 @@ contract AsksFloorPrice is ReentrancyGuard, UniversalExchangeEventV1, IncomingTr
         address sellerFundsRecipient;
         address askCurrency;
         uint16 findersFeeBps;
+        uint80 amount;
         uint256 askPrice;
     }
 
     /// @notice Emitted when an ask is created
-    /// @param tokenContract The ERC-721 token address of the created ask
-    /// @param tokenId The ERC-721 token ID of the created ask
+    /// @param tokenContract The ERC-1155 token address of the created ask
+    /// @param tokenId The ERC-1155 token ID of the created ask
     /// @param ask The metadata of the created ask
     event AskCreated(address indexed tokenContract, uint256 indexed tokenId, Ask ask);
 
     /// @notice Emitted when an ask price is updated
-    /// @param tokenContract The ERC-721 token address of the updated ask
-    /// @param tokenId The ERC-721 token ID of the updated ask
+    /// @param tokenContract The ERC-1155 token address of the updated ask
+    /// @param tokenId The ERC-1155 token ID of the updated ask
     /// @param ask The metadata of the updated ask
     event AskPriceUpdated(address indexed tokenContract, uint256 indexed tokenId, Ask ask);
 
     /// @notice Emitted when an ask is canceled
-    /// @param tokenContract The ERC-721 token address of the canceled ask
-    /// @param tokenId The ERC-721 token ID of the canceled ask
+    /// @param tokenContract The ERC-1155 token address of the canceled ask
+    /// @param tokenId The ERC-1155 token ID of the canceled ask
     /// @param ask The metadata of the canceled ask
     event AskCanceled(address indexed tokenContract, uint256 indexed tokenId, Ask ask);
 
     /// @notice Emitted when an ask is filled
-    /// @param tokenContract The ERC-721 token address of the filled ask
-    /// @param tokenId The ERC-721 token ID of the filled ask
+    /// @param tokenContract The ERC-1155 token address of the filled ask
+    /// @param tokenId The ERC-1155 token ID of the filled ask
     /// @param buyer The buyer address of the filled ask
     /// @param finder The address of finder who referred the ask
     /// @param ask The metadata of the filled ask
     event AskFilled(address indexed tokenContract, uint256 indexed tokenId, address indexed buyer, address finder, Ask ask);
 
     /// @param _erc20TransferHelper The ZORA ERC-20 Transfer Helper address
-    /// @param _erc721TransferHelper The ZORA ERC-721 Transfer Helper address
+    /// @param _erc1155TransferHelper The ZORA ERC-1155 Transfer Helper address
     /// @param _royaltyEngine The Manifold Royalty Engine address
     /// @param _protocolFeeSettings The ZoraProtocolFeeSettingsV1 address
     /// @param _wethAddress The WETH token address
     constructor(
         address _erc20TransferHelper,
-        address _erc721TransferHelper,
+        address _erc1155TransferHelper,
         address _royaltyEngine,
         address _protocolFeeSettings,
         address _wethAddress,
         address _floorPrice
     )
         IncomingTransferSupportV1(_erc20TransferHelper)
-        FeePayoutSupportV1(_royaltyEngine, _protocolFeeSettings, _wethAddress, ERC721TransferHelper(_erc721TransferHelper).ZMM().registrar())
+        FeePayoutSupportV1(_royaltyEngine, _protocolFeeSettings, _wethAddress, ERC1155TransferHelper(_erc1155TransferHelper).ZMM().registrar())
         ModuleNamingSupportV1("Asks: v1.1")
     {
-        erc721TransferHelper = ERC721TransferHelper(_erc721TransferHelper);
+        erc1155TransferHelper = ERC1155TransferHelper(_erc1155TransferHelper);
         floorPrice = FloorPrice(_floorPrice);
     }
 
@@ -120,8 +126,8 @@ contract AsksFloorPrice is ReentrancyGuard, UniversalExchangeEventV1, IncomingTr
     //         |
     //        / \
     /// @notice Creates the ask for a given NFT
-    /// @param _tokenContract The address of the ERC-721 token to be sold
-    /// @param _tokenId The ID of the ERC-721 token to be sold
+    /// @param _tokenContract The address of the ERC-1155 token to be sold
+    /// @param _tokenId The ID of the ERC-1155 token to be sold
     /// @param _askPrice The price to fill the ask
     /// @param _askCurrency The address of the ERC-20 token required to fill, or address(0) for ETH
     /// @param _sellerFundsRecipient The address to send funds once the ask is filled
@@ -129,39 +135,41 @@ contract AsksFloorPrice is ReentrancyGuard, UniversalExchangeEventV1, IncomingTr
     function createAsk(
         address _tokenContract,
         uint256 _tokenId,
+        uint256 _amount,
         uint256 _askPrice,
         address _askCurrency,
         address _sellerFundsRecipient,
         uint16 _findersFeeBps
     ) external nonReentrant {
-        address tokenOwner = IERC721(_tokenContract).ownerOf(_tokenId);
+        uint256 balance = IERC1155(_tokenContract).balanceOf(msg.sender, _tokenId);
 
+        uint256 spokenForAmount = amountInAsks(_tokenContract, _tokenId, msg.sender);
+        // Ensure the caller has enough tokens
+        require(balance - spokenForAmount >= _amount, "NOT_ENOUGH_TOKENS");
+
+        require(erc1155TransferHelper.isModuleApproved(msg.sender), "createAsk must approve AsksV1 module");
         require(
-            msg.sender == tokenOwner || IERC721(_tokenContract).isApprovedForAll(tokenOwner, msg.sender),
-            "createAsk must be token owner or operator"
-        );
-        require(erc721TransferHelper.isModuleApproved(msg.sender), "createAsk must approve AsksV1 module");
-        require(
-            IERC721(_tokenContract).isApprovedForAll(tokenOwner, address(erc721TransferHelper)),
-            "createAsk must approve ERC721TransferHelper as operator"
+            IERC1155(_tokenContract).isApprovedForAll(msg.sender, address(erc1155TransferHelper)),
+            "createAsk must approve ERC1155TransferHelper as operator"
         );
         require(_findersFeeBps <= 10000, "createAsk finders fee bps must be less than or equal to 10000");
         require(_sellerFundsRecipient != address(0), "createAsk must specify _sellerFundsRecipient");
         require(floorPrice.priceAboveFloor(_tokenContract, _askCurrency, _askPrice), "PRICE_TOO_LOW");
 
-        if (askForNFT[_tokenContract][_tokenId].seller != address(0)) {
-            _cancelAsk(_tokenContract, _tokenId);
-        }
+        ++asksCount;
 
-        askForNFT[_tokenContract][_tokenId] = Ask({
-            seller: tokenOwner,
+        askForNFT[_tokenContract][_tokenId][asksCount] = Ask({
+            seller: msg.sender,
             sellerFundsRecipient: _sellerFundsRecipient,
+            amount: uint80(_amount),
             askCurrency: _askCurrency,
             findersFeeBps: _findersFeeBps,
             askPrice: _askPrice
         });
 
-        emit AskCreated(_tokenContract, _tokenId, askForNFT[_tokenContract][_tokenId]);
+        asksPerUser[_tokenContract][_tokenId][msg.sender].push(asksCount);
+
+        emit AskCreated(_tokenContract, _tokenId, askForNFT[_tokenContract][_tokenId][asksCount]);
     }
 
     //        ,-.
@@ -187,17 +195,18 @@ contract AsksFloorPrice is ReentrancyGuard, UniversalExchangeEventV1, IncomingTr
     //         |
     //        / \
     /// @notice Updates the ask price for a given NFT
-    /// @param _tokenContract The address of the ERC-721 token
-    /// @param _tokenId The ID of the ERC-721 token
+    /// @param _tokenContract The address of the ERC-1155 token
+    /// @param _tokenId The ID of the ERC-1155 token
     /// @param _askPrice The ask price to set
     /// @param _askCurrency The address of the ERC-20 token required to fill, or address(0) for ETH
     function setAskPrice(
         address _tokenContract,
         uint256 _tokenId,
+        uint256 _askId,
         uint256 _askPrice,
         address _askCurrency
     ) external nonReentrant {
-        Ask storage ask = askForNFT[_tokenContract][_tokenId];
+        Ask storage ask = askForNFT[_tokenContract][_tokenId][_askId];
 
         require(ask.seller == msg.sender, "setAskPrice must be seller");
 
@@ -230,18 +239,17 @@ contract AsksFloorPrice is ReentrancyGuard, UniversalExchangeEventV1, IncomingTr
     //         |
     //        / \
     /// @notice Cancels the ask for a given NFT
-    /// @param _tokenContract The address of the ERC-721 token
-    /// @param _tokenId The ID of the ERC-721 token
-    function cancelAsk(address _tokenContract, uint256 _tokenId) external nonReentrant {
-        require(askForNFT[_tokenContract][_tokenId].seller != address(0), "cancelAsk ask doesn't exist");
+    /// @param _tokenContract The address of the ERC-1155 token
+    /// @param _tokenId The ID of the ERC-1155 token
+    function cancelAsk(address _tokenContract, uint256 _tokenId, uint256 _askId) external nonReentrant {
+        Ask storage ask = askForNFT[_tokenContract][_tokenId][_askId];
 
-        address tokenOwner = IERC721(_tokenContract).ownerOf(_tokenId);
         require(
-            msg.sender == tokenOwner || IERC721(_tokenContract).isApprovedForAll(tokenOwner, msg.sender),
-            "cancelAsk must be token owner or operator"
+            msg.sender == ask.seller,
+            "cancelAsk must be done by seller"
         );
 
-        _cancelAsk(_tokenContract, _tokenId);
+        _cancelAsk(_tokenContract, _tokenId, _askId);
     }
 
     //        ,-.
@@ -300,19 +308,20 @@ contract AsksFloorPrice is ReentrancyGuard, UniversalExchangeEventV1, IncomingTr
     //         |
     //        / \
     /// @notice Fills the ask for a given NFT, transferring the ETH/ERC-20 to the seller and NFT to the buyer
-    /// @param _tokenContract The address of the ERC-721 token
-    /// @param _tokenId The ID of the ERC-721 token
+    /// @param _tokenContract The address of the ERC-1155 token
+    /// @param _tokenId The ID of the ERC-1155 token
     /// @param _fillCurrency The address of the ERC-20 token using to fill, or address(0) for ETH
     /// @param _fillAmount The amount to fill the ask
     /// @param _finder The address of the ask referrer
     function fillAsk(
         address _tokenContract,
         uint256 _tokenId,
+        uint256 _askId,
         address _fillCurrency,
         uint256 _fillAmount,
         address _finder
     ) external payable nonReentrant {
-        Ask storage ask = askForNFT[_tokenContract][_tokenId];
+        Ask storage ask = askForNFT[_tokenContract][_tokenId][_askId];
 
         require(ask.seller != address(0), "fillAsk must be active ask");
         require(ask.askCurrency == _fillCurrency, "fillAsk _fillCurrency must match ask currency");
@@ -339,7 +348,7 @@ contract AsksFloorPrice is ReentrancyGuard, UniversalExchangeEventV1, IncomingTr
         _handleOutgoingTransfer(ask.sellerFundsRecipient, remainingProfit, ask.askCurrency, USE_ALL_GAS_FLAG);
 
         // Transfer NFT to buyer
-        erc721TransferHelper.transferFrom(_tokenContract, ask.seller, msg.sender, _tokenId);
+        erc1155TransferHelper.safeTransferFrom(_tokenContract, ask.seller, msg.sender, _tokenId, ask.amount, "");
 
         ExchangeDetails memory userAExchangeDetails = ExchangeDetails({tokenContract: _tokenContract, tokenId: _tokenId, amount: 1});
         ExchangeDetails memory userBExchangeDetails = ExchangeDetails({tokenContract: ask.askCurrency, tokenId: 0, amount: ask.askPrice});
@@ -347,15 +356,55 @@ contract AsksFloorPrice is ReentrancyGuard, UniversalExchangeEventV1, IncomingTr
         emit ExchangeExecuted(ask.seller, msg.sender, userAExchangeDetails, userBExchangeDetails);
         emit AskFilled(_tokenContract, _tokenId, msg.sender, _finder, ask);
 
-        delete askForNFT[_tokenContract][_tokenId];
+        removeAskFromUser(_tokenContract, _tokenId, _askId, msg.sender);
+
+        delete askForNFT[_tokenContract][_tokenId][_askId];
     }
 
     /// @dev Deletes canceled and invalid asks
-    /// @param _tokenContract The address of the ERC-721 token
-    /// @param _tokenId The ID of the ERC-721 token
-    function _cancelAsk(address _tokenContract, uint256 _tokenId) private {
-        emit AskCanceled(_tokenContract, _tokenId, askForNFT[_tokenContract][_tokenId]);
+    /// @param _tokenContract The address of the ERC-1155 token
+    /// @param _tokenId The ID of the ERC-1155 token
+    function _cancelAsk(address _tokenContract, uint256 _tokenId, uint256 _askId) private {
+        emit AskCanceled(_tokenContract, _tokenId, askForNFT[_tokenContract][_tokenId][_askId]);
 
-        delete askForNFT[_tokenContract][_tokenId];
+        removeAskFromUser(_tokenContract, _tokenId, _askId, msg.sender);
+
+        delete askForNFT[_tokenContract][_tokenId][_askId];
+    }
+
+
+    function amountInAsks(address _tokenContract, uint256 _tokenId, address account) internal returns (uint256) {
+        uint256[] memory existingAsks = asksPerUser[_tokenContract][_tokenId][account];
+        uint256 length = existingAsks.length;
+
+        uint256 result;
+        for(uint256 i=0;i<length;) {
+            Ask storage a = askForNFT[_tokenContract][_tokenId][existingAsks[i]];
+
+            result += a.amount;
+
+            unchecked {
+                ++i;
+            }
+        }
+
+        return result;
+    }
+
+    function removeAskFromUser(address _tokenContract, uint256 _tokenId, uint256 _askId, address account) internal {
+        uint256[] memory existingAsks = asksPerUser[_tokenContract][_tokenId][account];
+        uint256 length = existingAsks.length;
+
+        for(uint256 i=0;i<length;) {
+            if (existingAsks[i] == _askId) {
+                asksPerUser[_tokenContract][_tokenId][account][i] = existingAsks[length - 1];
+                asksPerUser[_tokenContract][_tokenId][account].pop();
+                break;
+            }
+
+            unchecked {
+                ++i;
+            }
+        }
     }
 }
