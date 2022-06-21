@@ -5,7 +5,7 @@ import { deployTokens, Tokens } from "../scripts/deployTokens"
 import { deployZora, Contracts } from "../scripts/deploy"
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 
-describe("Zora", function () {
+describe("1155", function () {
   let tokens:Tokens;
   let zora:Contracts;
 
@@ -153,12 +153,12 @@ describe("Zora", function () {
       (await zora.ReserveAuctionBuyNowERC20ERC1155.getAuctionsPerUser(tokens.ERC1155.address, 0, addr1.address)).length
     ).to.be.eq(2)
 
-    console.log(await zora.ReserveAuctionBuyNowERC20ERC1155.auctionsForNFT(
-      tokens.ERC1155.address,
-      0,
-      1
-      )
-    )
+    // console.log(await zora.ReserveAuctionBuyNowERC20ERC1155.auctionsForNFT(
+    //   tokens.ERC1155.address,
+    //   0,
+    //   1
+    //   )
+    // )
 
     await zora.ReserveAuctionBuyNowERC20ERC1155.connect(addr2).createBid(
       tokens.ERC1155.address,
@@ -273,8 +273,8 @@ describe("Zora", function () {
       )
     ).to.be.revertedWith("NOT_ENOUGH_TOKENS")
 
-    console.log(await zora.AsksFP1155.askForNFT(tokens.ERC1155.address, 0, 1))
-    console.log(await zora.AsksFP1155.askForNFT(tokens.ERC1155.address, 0, 2))
+    // console.log(await zora.AsksFP1155.askForNFT(tokens.ERC1155.address, 0, 1))
+    // console.log(await zora.AsksFP1155.askForNFT(tokens.ERC1155.address, 0, 2))
 
 
     await tokens.ERC20.approve(zora.ERC20TransferHelper.address, amount);

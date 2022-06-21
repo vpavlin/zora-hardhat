@@ -9,6 +9,7 @@ import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 import "hardhat-contract-sizer"
+import "hardhat-gas-reporter";
 
 dotenv.config();
 
@@ -57,10 +58,15 @@ const config: HardhatUserConfig = {
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
+    gasPriceApi: "https://api.bscscan.com/api?module=proxy&action=eth_gasPrice",
+    coinmarketcap: process.env.CMC_KEY,
+    token: "BNB"
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
   },
 };
+
+console.log(config.gasReporter)
 
 export default config;

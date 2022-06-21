@@ -5,7 +5,7 @@ import { deployTokens, Tokens } from "../scripts/deployTokens"
 import { deployZora, Contracts } from "../scripts/deploy"
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 
-describe("Zora", function () {
+describe("721", function () {
   let tokens:Tokens;
   let zora:Contracts;
 
@@ -20,18 +20,18 @@ describe("Zora", function () {
 
     await zora.ZoraModuleManager.setBatchApprovalForModules(
       [
-        zora.OffersV1.address,
+        //zora.OffersV1.address,
         zora.AsksFP.address,
         zora.ReserveAuctionBuyNowERC20.address,
       ], true)
     await zora.ZoraModuleManager.connect(addr1).setBatchApprovalForModules([
-      zora.OffersV1.address,
+      //zora.OffersV1.address,
       zora.AsksFP.address,
       zora.ReserveAuctionBuyNowERC20.address,
     ], true)
 
     await zora.ZoraModuleManager.connect(addr2).setBatchApprovalForModules([
-      zora.OffersV1.address,
+      //zora.OffersV1.address,
       zora.AsksFP.address,
       zora.ReserveAuctionBuyNowERC20.address,
     ], true)
@@ -41,13 +41,13 @@ describe("Zora", function () {
   })
   it("Should show registered modules", async () => {
     expect(
-      await zora.ZoraModuleManager.moduleRegistered(zora.OffersV1.address)
+      await zora.ZoraModuleManager.moduleRegistered(zora.ReserveAuctionBuyNowERC20.address)
     ).to.be.true
     expect(
       await zora.ZoraModuleManager.moduleRegistered(zora.AsksFP.address)
     )
   });
-  it("Should allow posting offer for an NFT and filling it", async () => {
+  /*it("Should allow posting offer for an NFT and filling it", async () => {
     const amount = ethers.utils.parseEther("10");
 
     //Module approvals set in before each!!
@@ -82,7 +82,7 @@ describe("Zora", function () {
     expect(
       await tokens.ERC20.balanceOf(addr1.address)
     ).to.be.equal(amount)
-  })
+  })*/
 
   it("Should allow posting and bidding in auction", async () => {
     const amount = ethers.utils.parseEther("10");
@@ -120,7 +120,7 @@ describe("Zora", function () {
         latestBlock.timestamp + 1,
         tokens.ERC20.address,
     );
-    console.log(await zora.ReserveAuctionBuyNowERC20.auctionForNFT(tokens.ERC721.address, 0))
+    //console.log(await zora.ReserveAuctionBuyNowERC20.auctionForNFT(tokens.ERC721.address, 0))
 
 
     await tokens.ERC20.approve(zora.ERC20TransferHelper.address, amount)
@@ -204,10 +204,10 @@ describe("Zora", function () {
         latestBlock.timestamp + 1,
         tokens.ERC20.address,
     );
-    console.log(await zora.ReserveAuctionBuyNowERC20.auctionForNFT(tokens.ERC721.address, 0))
+    //console.log(await zora.ReserveAuctionBuyNowERC20.auctionForNFT(tokens.ERC721.address, 0))
 
-    console.log("Has balance: ", await tokens.ERC721.balanceOf(zora.ReserveAuctionBuyNowERC20.address))
-    console.log("Is owner: ", await tokens.ERC721.ownerOf(0))
+    //console.log("Has balance: ", await tokens.ERC721.balanceOf(zora.ReserveAuctionBuyNowERC20.address))
+    //console.log("Is owner: ", await tokens.ERC721.ownerOf(0))
 
     await tokens.ERC721.connect(addr1).setApprovalForAll(zora.ERC721TransferHelper.address, false)
 
@@ -380,7 +380,7 @@ describe("Zora", function () {
       0
     )
 
-    console.log(await zora.AsksFP.askForNFT(tokens.ERC721.address, 0))
+    // console.log(await zora.AsksFP.askForNFT(tokens.ERC721.address, 0))
 
     await tokens.ERC20.approve(zora.ERC20TransferHelper.address, amount);
     await zora.AsksFP.fillAsk(tokens.ERC721.address, 0, tokens.ERC20.address, amount, ethers.constants.AddressZero)
@@ -427,7 +427,7 @@ describe("Zora", function () {
       0
     )
 
-    console.log(await zora.AsksFP.askForNFT(tokens.ERC721.address, 0))
+    //console.log(await zora.AsksFP.askForNFT(tokens.ERC721.address, 0))
 
     await tokens.ERC20.approve(zora.ERC20TransferHelper.address, amount);
     await zora.AsksFP.fillAsk(tokens.ERC721.address, 0, tokens.ERC20.address, amount, ethers.constants.AddressZero)

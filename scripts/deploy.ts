@@ -10,8 +10,8 @@ import { ERC20TransferHelper } from "../typechain/ERC20TransferHelper"
 import { ERC721TransferHelper } from "../typechain/ERC721TransferHelper"
 import { ERC1155TransferHelper } from "../typechain/ERC1155TransferHelper"
 import { AsksFloorPrice } from "../typechain/AsksFloorPrice"
+import { Royalties } from "../typechain/Royalties"
 import { AsksFloorPriceErc1155 } from "../typechain/AsksFloorPriceErc1155"
-import { OffersV1 } from "../typechain/OffersV1"
 import { ReserveAuctionBuyNowErc20 } from "../typechain/ReserveAuctionBuyNowErc20"
 import { ReserveAuctionBuyNowErc20Erc1155 } from "../typechain/ReserveAuctionBuyNowErc20Erc1155"
 
@@ -28,10 +28,10 @@ export type Contracts = {
   ERC1155TransferHelper: ERC1155TransferHelper
   AsksFP: AsksFloorPrice
   AsksFP1155: AsksFloorPriceErc1155
-  OffersV1: OffersV1
   ReserveAuctionBuyNowERC20: ReserveAuctionBuyNowErc20
   ReserveAuctionBuyNowERC20ERC1155: ReserveAuctionBuyNowErc20Erc1155
   FloorPrice: FloorPrice
+  Royalties: Royalties
 }
 
 const deployed = (contracts:Contracts) => {
@@ -50,6 +50,8 @@ export const deployZora = async (print?:Boolean) => {
   const registrar = (await ethers.getSigners())[0];
   const feeSettings:ZoraProtocolFeeSettings = await (await ethers.getContractFactory("ZoraProtocolFeeSettings")).deploy() as ZoraProtocolFeeSettings
   await feeSettings.deployed()
+
+  const royalties:Royalties = await (await ethers.getContractFactory("Royalties")).deploy() as Royalties
   const zmm:ZoraModuleManager = await (await ethers.getContractFactory("ZoraModuleManager")).deploy(registrar.address, feeSettings.address) as ZoraModuleManager
 
   await feeSettings.init(zmm.address, ethers.constants.AddressZero)
@@ -63,7 +65,7 @@ export const deployZora = async (print?:Boolean) => {
   const asksFloorPrice1155:AsksFloorPriceErc1155 = await (await ethers.getContractFactory("AsksFloorPriceErc1155")).deploy(
     erc20TH.address,
     erc1155TH.address,
-    ethers.constants.AddressZero,
+    royalties.address,
     feeSettings.address,
     wbnb,
     floorPrice.address
@@ -72,19 +74,17 @@ export const deployZora = async (print?:Boolean) => {
   const asksFloorPrice:AsksFloorPrice = await (await ethers.getContractFactory("AsksFloorPrice")).deploy(
     erc20TH.address,
     erc721TH.address,
-    ethers.constants.AddressZero,
+    royalties.address,
     feeSettings.address,
     wbnb,
     floorPrice.address
   ) as AsksFloorPrice
-  const offersv1:OffersV1 = await (await ethers.getContractFactory("OffersV1")).deploy(erc20TH.address, erc721TH.address, ethers.constants.AddressZero, feeSettings.address, wbnb) as OffersV1
-
 
   const auctionBuyNowErc20:ReserveAuctionBuyNowErc20 = await (
     await ethers.getContractFactory("ReserveAuctionBuyNowErc20")).deploy(
       erc20TH.address,
       erc721TH.address,
-      ethers.constants.AddressZero,
+      royalties.address,
       feeSettings.address,
       wbnb,
       floorPrice.address
@@ -94,7 +94,7 @@ export const deployZora = async (print?:Boolean) => {
     await ethers.getContractFactory("ReserveAuctionBuyNowErc20Erc1155")).deploy(
       erc20TH.address,
       erc1155TH.address,
-      ethers.constants.AddressZero,
+      royalties.address,
       feeSettings.address,
       wbnb,
       floorPrice.address
@@ -103,7 +103,6 @@ export const deployZora = async (print?:Boolean) => {
 
   await zmm.registerModule(asksFloorPrice.address)
   await zmm.registerModule(asksFloorPrice1155.address)
-  await zmm.registerModule(offersv1.address)
   await zmm.registerModule(auctionBuyNowErc20.address)
   await zmm.registerModule(auctionBuyNowErc20Erc1155.address)
 
@@ -118,10 +117,10 @@ export const deployZora = async (print?:Boolean) => {
     ERC1155TransferHelper: erc1155TH,
     AsksFP: asksFloorPrice,
     AsksFP1155: asksFloorPrice1155,
-    OffersV1: offersv1,
     ReserveAuctionBuyNowERC20: auctionBuyNowErc20,
     ReserveAuctionBuyNowERC20ERC1155: auctionBuyNowErc20Erc1155,
     FloorPrice: floorPrice,
+    Royalties: royalties,
   }
 
   if (print) {
